@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>CryptoZombies front-end</title>
+  <link rel="icon" href="favicon.ico">
+  <script language="javascript" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script language="javascript" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/web3/1.2.7-rc.0/web3.min.js"></script>
+  <script language="javascript" type="text/javascript" src="cryptozombies_abi.js"></script>
+
+  <style>
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      background-color: #111;
+      color: #ffcc00;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+
+    h1 {
+      color: #ff0000;
+      margin-top: 30px;
+    }
+
+    .navbar {
+      background-color: #222;
+      overflow: hidden;
+    }
+
+    .navbar a {
+      float: left;
+      display: block;
+      color: #fff;
+      text-align: center;
+      padding: 14px 20px;
+      text-decoration: none;
+    }
+
+    .navbar a:hover {
+      background-color: #444;
+    }
+
+    .button {
+      background-color: #ff0000;
+      color: #000;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 5px;
+      margin: 10px;
+    }
+
+    .button:hover {
+      background-color: #cc0000;
+    }
+
+    .zombie {
+      background-color: #333;
+      border: 2px solid #ff0000;
+      border-radius: 10px;
+      padding: 20px;
+      margin: 20px auto;
+      width: 80%;
+      max-width: 600px;
+      text-align: left;
+    }
+
+    .zombie ul {
+      list-style-type: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .zombie ul li {
+      padding: 5px 0;
+    }
+
+    #txStatus {
+      margin-top: 20px;
+      font-style: italic;
+    }
+
+    #zombies {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .logo {
+      max-width: 150px;
+      margin: 30px auto;
+    }
+
+    /* Responsive styles */
+    @media only screen and (max-width: 600px) {
+      .zombie {
+        width: 90%;
+      }
+
+      .button {
+        font-size: 14px;
+        padding: 8px 16px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="navbar">
+    <a href="index.html">Home</a>
+    <a href="about.html">About</a>
+    <a href="contact.html">Contact Us</a>
+  </div>
+
+  <img src="logo-no-background.png" alt="CryptoZombies" class="logo">
+  <h1>Welcome to the Crypt of the Undead</h1>
+
+  <div id="txStatus"></div>
+  <div id="zombies"></div>
+
+  <button class="button showZombieButton">Summon Zombies</button>
+  <button class="button createzombieButton">Create Zombie</button>
+  <button class="button levelupButton">Enrage</button>
+  <script>
+
+    var cryptoZombies;
+    var userAccount;
+    const showZombieButton = document.querySelector('.showZombieButton');
+    const createzombieButton = document.querySelector('.createzombieButton');
+    const levelupButton = document.querySelector('.levelupButton');
+
+    function startApp() {
+	
+      //ZombieOwnership contract address
+      var cryptoZombiesAddress = "0x444b1940DA2b823e579F68F0D35fd28692D14992";
+
+      cryptoZombies = new web3.eth.Contract(cryptoZombiesABI, cryptoZombiesAddress);
+
+      cryptoZombies.events.Transfer({ filter: { _to: userAccount } })
+        .on("data", function (event) {
+          let data = event.returnValues;
+          getZombiesByOwner(userAccount).then(displayZombies);
+        }).on("error", console.error);
+    }
+
+    function displayZombies(ids) {
+      $("#zombies").empty();
+      for (id of ids) {
+
+        getZombieDetails(id)
+          .then(function (zombie) {
+            $("#zombies").append(`<div class="zombie">
+              <ul>
+                <li>Name: ${zombie.name}</li>
+                <li>DNA: ${zombie.dna}</li>
+                <li>Level: ${zombie.level}</li>
+                <li>Wins: ${zombie.winCount}</li>
+                <li>Losses: ${zombie.lossCount}</li>
+                <li>Ready Time: ${zombie.readyTime}</li>
+              </ul>
+            </div>`);
+          });
+      }
+    }
+
+    function createRandomZombie(name) {
+      $("#txStatus").text("Creating new zombie on the blockchain. This may take a while...");
+      return cryptoZombies.methods.createRandomZombie(name)
+        .send({ from: userAccount })
+        .on("receipt", function (receipt) {
+          $("#txStatus").text("Successfully created " + name + "!");
+          getZombiesByOwner(userAccount).then(displayZombies);
+        })
+        .on("error", function (error) {
+          $("#txStatus").text(error);
+        });
+    }
+
+    function levelUp(zombieId) {
+      $("#txStatus").text("Leveling up your zombie...");
+      return cryptoZombies.methods.levelUp(zombieId)
+        .send({ from: userAccount, value: web3.utils.toWei("0.001", "ether") })
+        .on("receipt", function (receipt) {
+          $("#txStatus").text("Power overwhelming! Zombie successfully leveled up");
+        })
+        .on("error", function (error) {
+          $("#txStatus").text(error);
+        });
+    }
+
+    function getZombieDetails(id) {
+      return cryptoZombies.methods.zombies(id).call()
+    }
+
+    function getZombiesByOwner(owner) {
+      return cryptoZombies.methods.getZombiesByOwner(owner).call()
+    }
+
+    window.addEventListener('load', async () => {
+      if (window.ethereum) {
+        window.web3 = new Web3(ethereum);
+        try {
+          const accounts = await ethereum.enable();
+          userAccount = accounts[0];
+          startApp();
+        } catch (error) {
+          console.error(error);
+        }
+      } else if (window.web3) {
+        window.web3 = new Web3(web3.currentProvider);
+        userAccount = web3.eth.accounts[0];
+        startApp();
+      } else {
+        console.log('Non-Ethereum browser detected. You should consider trying MetaMask!');
+      }
+    });
+
+    createzombieButton.addEventListener('click', () => {
+      createRandomZombie(userAccount);
+    });
+
+    showZombieButton.addEventListener('click', () => {
+      getZombiesByOwner(userAccount)
+        .then(displayZombies);
+    });
+
+    levelupButton.addEventListener('click', () => {
+      getZombiesByOwner(userAccount)
+        .then(levelUp);
+    });
+
+  </script>
+</body>
+
+</html>
